@@ -1,4 +1,3 @@
-import { gql, useMutation, useQuery } from '@apollo/client';
 import {
   Box,
   Container,
@@ -7,7 +6,6 @@ import {
   ListItemIcon,
   Avatar,
   ListItemText,
-  ListItemSecondaryAction,
   IconButton,
   ListItemButton,
   Typography,
@@ -18,36 +16,45 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useState } from 'react';
+import {
+  useAddTodo,
+  useDeleteTodo,
+  useEditTodo,
+  useGetTodos,
+} from './hooks/useTodos';
+import { useGetUserData } from './hooks/useUser';
 
 function App() {
   const [title, setTitle] = useState('');
   const [editingId, setEditingId] = useState(null);
 
-  const { loading, error, data } = useQuery(GET_TODOS);
+  // QUERY
+  const { loading, error, data } = useGetTodos();
+  const {
+    loading: userLoading,
+    error: userError,
+    data: userData,
+  } = useGetUserData();
 
-  const [createTodo] = useMutation(ADD_TODO, {
-    onCompleted: () => setTitle(''),
-    refetchQueries: [{ query: GET_TODOS }],
-  });
+  console.log('userData', userData);
 
-  const [updateTodo] = useMutation(EDIT_TODO, {
-    onCompleted: () => {
-      setEditingId(null);
-      setTitle('');
-    },
-    refetchQueries: [{ query: GET_TODOS }],
-  });
-
-  const [deleteTodo] = useMutation(DELETE_TODO, {
-    refetchQueries: [{ query: GET_TODOS }],
-  });
+  // MUTATIONS
+  const [createTodo] = useAddTodo();
+  const [updateTodo] = useEditTodo();
+  const [deleteTodo] = useDeleteTodo();
 
   const addTodo = () => {
-    createTodo({ variables: { title } });
+    createTodo({ variables: { title }, onCompleted: () => setTitle('') });
   };
 
   const editTodo = () => {
-    updateTodo({ variables: { id: editingId, title } });
+    updateTodo({
+      variables: { id: editingId, title },
+      onCompleted: () => {
+        setEditingId(null);
+        setTitle('');
+      },
+    });
   };
 
   const onDeleteTodo = id => {
@@ -59,21 +66,35 @@ function App() {
     setEditingId(+todo.id);
   };
 
-  if (loading) {
+  const logout = () => {
+    localStorage.removeItem('token');
+    window.location.href = '/';
+  };
+
+  if (loading || userLoading) {
     return <p>Loading...</p>;
   }
 
-  if (error) {
+  if (error || userError) {
     return <p>Error: {error.message}</p>;
   }
 
-  console.log('DATA', data);
-
   return (
     <Container>
-      <Typography variant="h3" align="center">
-        Todo App
+      <Typography variant="h3" align="center" mb={2}>
+        Welcome to Todo App {userData?.user?.username}
+        {userData?.user?.username && (
+          <Button
+            style={{ marginLeft: '10px' }}
+            variant="contained"
+            onClick={logout}
+            color="error"
+          >
+            Logout
+          </Button>
+        )}
       </Typography>
+
       <Box style={{ maxWidth: '500px', margin: '0 auto', display: 'flex' }}>
         <TextField
           fullWidth
@@ -87,9 +108,9 @@ function App() {
           variant="contained"
           color="primary"
           disabled={!title}
-          onClick={editTodo ? editTodo : addTodo}
+          onClick={editingId ? editTodo : addTodo}
         >
-          {editTodo ? 'Update' : 'Add'}
+          {editingId ? 'Update' : 'Add'}
         </Button>
       </Box>
       <Box component="div" style={{ maxWidth: '500px', margin: '0 auto' }}>
@@ -128,47 +149,5 @@ function App() {
     </Container>
   );
 }
-
-const GET_TODOS = gql`
-  query {
-    todos {
-      id
-      title
-      date
-    }
-  }
-`;
-
-const ADD_TODO = gql`
-  mutation CreateTodo($title: String!) {
-    createTodo(title: $title) {
-      todo {
-        id
-        title
-        date
-      }
-    }
-  }
-`;
-
-const EDIT_TODO = gql`
-  mutation UpdateTodo($id: Int!, $title: String!) {
-    updateTodo(id: $id, title: $title) {
-      todo {
-        id
-        title
-        date
-      }
-    }
-  }
-`;
-
-const DELETE_TODO = gql`
-  mutation DeleteTodo($id: Int!) {
-    deleteTodo(id: $id) {
-      message
-    }
-  }
-`;
 
 export default App;

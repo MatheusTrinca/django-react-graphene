@@ -9,7 +9,7 @@ from .models import Todo
 class TodoType(DjangoObjectType):
     class Meta:
         model = Todo
-        fields = ("id", "title", "date")
+        # fields = ("id", "title", "date")
 
 
 class UserType(DjangoObjectType):
@@ -19,13 +19,24 @@ class UserType(DjangoObjectType):
 
 class Query(graphene.ObjectType):
     todos = graphene.List(TodoType, id=graphene.Int())
+    user = graphene.Field(UserType)
 
     @login_required
     def resolve_todos(self, info, **kwargs):
+        user = info.context.user
+        if user.is_anonymous:
+            raise Exception("Login required")
         if kwargs.get("id"):
             return Todo.objects.filter(id=kwargs.get("id"))
 
-        return Todo.objects.all().order_by("-id")
+        return Todo.objects.filter(user=user).order_by("-id")
+
+    @login_required
+    def resolve_user(self, info):
+        user = info.context.user
+        if user.is_anonymous:
+            raise Exception("Login required")
+        return info.context.user
 
 
 class CreateUser(graphene.Mutation):
@@ -53,7 +64,7 @@ class CreateTodo(graphene.Mutation):
         user = info.context.user
         if user.is_anonymous:
             raise Exception("Login required")
-        todo = Todo(title=title)
+        todo = Todo(user=user, title=title)
         todo.save()
         return CreateTodo(todo=todo)
 
@@ -67,7 +78,10 @@ class UpdateTodo(graphene.Mutation):
 
     @login_required
     def mutate(self, info, id, title):
+        user = info.context.user
         todo = Todo.objects.get(id=id)
+        if user != todo.user:
+            raise Exception("You don't have permission to update this todo")
         todo.title = title
         todo.save()
         return UpdateTodo(todo=todo)
@@ -81,7 +95,10 @@ class DeleteTodo(graphene.Mutation):
 
     @login_required
     def mutate(self, info, id):
+        user = info.context.user
         todo = Todo.objects.get(id=id)
+        if user != todo.user:
+            raise Exception("You don't have permission to delete this todo")
         todo.delete()
         return DeleteTodo(message=f"Todo id: {id} was deleted")
 
